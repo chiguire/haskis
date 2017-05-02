@@ -1,0 +1,27 @@
+name:                haskis
+version:             0.1.0.0
+synopsis:            A basic fit-the-falling-blocks game also known by a rather famous trademarked name
+description:
+  Move and rotate falling blocks to fit them into lines accross the board
+homepage:            https://github.com/chiguire/haskis
+license:             GPL-3.0
+license-file:        LICENSE
+author:              Ciro Durán
+maintainer:          ciro.duran@gmail.com
+copyright:           Copyright © 2017 Ciro Durán
+category:            Game
+build-type:          Simple
+cabal-version:       >=1.10
+extra-source-files:  README.md
+data-files:          assets/*.bmp
+
+executable haskis
+  hs-source-dirs:      src
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
+                     , sdl2
+                     , array
+                     , split
+                     , time
+                     , text
