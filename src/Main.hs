@@ -32,7 +32,7 @@ screenWidth, screenHeight :: CInt
 (screenWidth, screenHeight) = (640, 480)
 
 data GamePlayAction = Quit | Accelerate | Hammer | RotateLeft | RotateRight | MoveLeft | MoveRight deriving Eq
-data BlockType = None | L | InvertedL | S | InvertedS | T | Line | Square deriving Show
+data BlockType = None | L | InvertedL | S | InvertedS | T | Line | Square deriving (Show, Eq)
 data BlockOrientation = North | East | West | South
 data BlockPosition = BP Int Int
 type HaskisBlockData = Array (Int, Int) BlockType
@@ -121,11 +121,15 @@ rotateArrayRight arr = array ((x1,x0),(y1,y0))
                              invertedIndices = [((y1-i),j) | j <- [x0..y0], i <- [x1..y1]]
                              arrElements = elems arr
 
---blocksIntersect :: HaskisBlockData -> HaskisBlockData -> Bool
---blocksIntersect b1 b2 =
---blockCollidesWithBoard :: HaskisBlockData -> Block -> Bool
---blockCollidesWithBoard board block = blocksIntersect (makeBlockDataFromBlock block) board
-blockCollidesWithBoard _ _ = False
+blocksIntersect :: HaskisBlockData -> HaskisBlockData -> Bool
+blocksIntersect b1 b2 = any (nonNone) $ zip b1values b2values
+                        where nonNone (x, y) = (x == None) || (y == None)
+                              b1ix = indices b1
+                              b1values = map ((!) b1) $ b1ix
+                              b2values = map ((!) b2) $ b1ix
+
+blockCollidesWithBoard :: Block -> HaskisBlockData -> Bool
+blockCollidesWithBoard block board = blocksIntersect (makeBlockDataFromBlock block) board
 
 blockNextPosition :: BlockPosition -> Bool -> BlockPosition
 blockNextPosition a False = a
@@ -232,8 +236,8 @@ main = do
             quit = elem Quit events'
             executeTick        = (currentBlockTimer inputGameState) == 0
             currentBlockTimer' = if executeTick then gameStartingBlockTimer else ((currentBlockTimer inputGameState) - 1)
-            blockCollides      = if executeTick then (blockCollidesWithBoard (currentBlock inputGameState) (boardContent inputGameState)) else False
             currentBlock'      = currentBlock inputGameState
+            blockCollides      = executeTick && isJust currentBlock' && (blockCollidesWithBoard (fromJust currentBlock') (boardContent inputGameState))
             currentBlock''     = if (isJust currentBlock')
               then
                 Just Block {
