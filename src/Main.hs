@@ -48,6 +48,17 @@ data Block = Block {
   blockOrientation :: BlockOrientation
 }
 
+data BlockImage = BlockImage {
+  getLImage         :: SDL.Texture,
+  getInvertedLImage :: SDL.Texture,
+  getSImage         :: SDL.Texture,
+  getInvertedSImage :: SDL.Texture,
+  getTImage         :: SDL.Texture,
+  getLineImage      :: SDL.Texture,
+  getSquareImage    :: SDL.Texture,
+  getNoneImage      :: SDL.Texture
+}
+
 data GameState = GameState {
   boardWidth :: Int,
   boardHeight :: Int,
@@ -97,6 +108,16 @@ makeBlockDataFromBlock block = case bo of
         bt = (blockType block)
         bp = (blockPosition block)
 
+getBlockImage :: BlockImage -> BlockType -> SDL.Texture
+getBlockImage bi L         =  getLImage         bi
+getBlockImage bi InvertedL =  getInvertedLImage bi
+getBlockImage bi S         =  getSImage         bi
+getBlockImage bi InvertedS =  getInvertedSImage bi
+getBlockImage bi T         =  getTImage         bi
+getBlockImage bi Line      =  getLineImage      bi
+getBlockImage bi Square    =  getSquareImage    bi
+getBlockImage bi None      =  getNoneImage      bi
+
 blockTypeToChar :: BlockType -> Char
 blockTypeToChar None      = '.'
 blockTypeToChar L         = 'L'
@@ -142,7 +163,7 @@ blockToStringList arr = chunksOf (y0+1) $ map (blockTypeToChar.(arr!)) elemsInOr
 
 gameStartingWidth = 10
 gameStartingHeight = 20
-gameStartingBlockTimer = 30 -- TODO: Make it dependant on level
+gameStartingBlockTimer = 300 -- TODO: Make it dependant on level
 gameStartingOrientation = North
 
 startingState :: Integer -> GameState
@@ -196,6 +217,10 @@ loadTexture renderer path = do
   bmp <- SDL.loadBMP path
   SDL.createTextureFromSurface renderer bmp <* SDL.freeSurface bmp
 
+createTexture :: SDL.Renderer -> Int -> Int -> IO SDL.Texture
+createTexture renderer width height = do
+  SDL.createTexture renderer SDL.RGBA8888 SDL.TextureAccessStatic (V2 1 1)
+
 renderTexture :: SDL.Renderer -> SDL.Texture -> RenderPos -> IO ()
 renderTexture renderer tex pos = do
   ti <- SDL.queryTexture tex
@@ -207,10 +232,11 @@ renderTexture renderer tex pos = do
       extent = V2 w h
   SDL.copy renderer tex Nothing (Just $ SDL.Rectangle pos' extent)
 
-renderGameStateOnScreen :: GameState -> SDL.Renderer -> SDL.Texture -> IO ()
-renderGameStateOnScreen gameState renderer image = do
-  let imgPos' = V2 10 20
-  renderTexture renderer image $ At (P imgPos')
+renderGameStateOnScreen :: GameState -> SDL.Renderer -> BlockImage -> IO ()
+renderGameStateOnScreen gameState renderer blockImage = do
+  mapM_ (\((x,y),l) -> renderTexture renderer (getBlockImage blockImage l) $ At (P (V2 ((fromIntegral x)*32) ((fromIntegral y)*32)))) $ assocs $ boardContent $ gameState
+  --let imgPos' = V2 10 20
+  --renderTexture renderer image $ At (P imgPos')
 
 --getDataFileName :: FilePath -> IO FilePath
 --getDataFileName filename = do
@@ -225,7 +251,26 @@ main = do
 
   window   <- SDL.createWindow "Haskis" winConfig
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
-  image    <- getDataFileName "assets/element_red_square.bmp" >>= loadTexture renderer
+
+  lImage         <- getDataFileName "assets/element_blue_square.bmp"   >>= loadTexture renderer
+  invertedLImage <- getDataFileName "assets/element_green_square.bmp"  >>= loadTexture renderer
+  sImage         <- getDataFileName "assets/element_grey_square.bmp"   >>= loadTexture renderer
+  invertedSImage <- getDataFileName "assets/element_orange_square.bmp" >>= loadTexture renderer
+  tImage         <- getDataFileName "assets/element_purple_square.bmp" >>= loadTexture renderer
+  lineImage      <- getDataFileName "assets/element_red_square.bmp"    >>= loadTexture renderer
+  squareImage    <- getDataFileName "assets/element_yellow_square.bmp" >>= loadTexture renderer
+  noneImage      <- createTexture renderer 1 1
+  let blockImage = BlockImage {
+    getLImage         = lImage,
+    getInvertedLImage = invertedLImage,
+    getSImage         = sImage,
+    getInvertedSImage = invertedSImage,
+    getTImage         = tImage,
+    getLineImage      = lineImage,
+    getSquareImage    = squareImage,
+    getNoneImage      = noneImage
+  }
+
   startingTime <- getPOSIXTimeSecs
 
   let initialGameState = startingState startingTime
@@ -260,13 +305,19 @@ main = do
             }
 
         SDL.clear renderer
-        renderGameStateOnScreen inputGameState renderer image
+        renderGameStateOnScreen inputGameState renderer blockImage
         SDL.present renderer
         unless quit $ loop nextGameState
 
   loop initialGameState
 
-  SDL.destroyTexture image
+  SDL.destroyTexture lImage
+  SDL.destroyTexture invertedLImage
+  SDL.destroyTexture sImage
+  SDL.destroyTexture invertedSImage
+  SDL.destroyTexture tImage
+  SDL.destroyTexture lineImage
+  SDL.destroyTexture squareImage
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
 
