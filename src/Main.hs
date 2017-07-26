@@ -56,7 +56,9 @@ data BlockImage = BlockImage {
   getTImage         :: SDL.Texture,
   getLineImage      :: SDL.Texture,
   getSquareImage    :: SDL.Texture,
-  getNoneImage      :: SDL.Texture
+  getNoneImage      :: SDL.Texture,
+  getStarImage      :: SDL.Texture,
+  getHeartImage     :: SDL.Texture
 }
 
 data GameState = GameState {
@@ -232,9 +234,16 @@ renderTexture renderer tex pos = do
       extent = V2 w h
   SDL.copy renderer tex Nothing (Just $ SDL.Rectangle pos' extent)
 
-renderGameStateOnScreen :: GameState -> SDL.Renderer -> BlockImage -> IO ()
-renderGameStateOnScreen gameState renderer blockImage = do
-  mapM_ (\((x,y),l) -> renderTexture renderer (getBlockImage blockImage l) $ At (P (V2 ((fromIntegral x)*32) ((fromIntegral y)*32)))) $ assocs $ boardContent $ gameState
+drawBlock :: SDL.Renderer -> BlockImage -> ((Int, Int), BlockType) -> IO ()
+drawBlock renderer blockImage ((x,y),l) = do
+  when (l /= None) $ renderTexture renderer (getBlockImage blockImage l) $ At (P (V2 ((fromIntegral x)*32) ((fromIntegral y)*32)))
+
+renderGameStateOnScreen :: GameState -> SDL.Renderer -> BlockImage -> Bool -> Bool -> IO ()
+renderGameStateOnScreen gameState renderer blockImage executeTick blockCollides = do
+  mapM_ (drawBlock renderer blockImage) $ assocs $ boardContent $ gameState
+  when (isJust $ currentBlock gameState) $ mapM_ (drawBlock renderer blockImage) $ assocs $ makeBlockDataFromBlock $ fromJust $ currentBlock gameState
+  when executeTick $ renderTexture renderer (getHeartImage blockImage) (At (P (V2 500 200)))
+  when blockCollides $ renderTexture renderer (getStarImage blockImage) (At (P (V2 532 200)))
   --let imgPos' = V2 10 20
   --renderTexture renderer image $ At (P imgPos')
 
@@ -260,6 +269,9 @@ main = do
   lineImage      <- getDataFileName "assets/element_red_square.bmp"    >>= loadTexture renderer
   squareImage    <- getDataFileName "assets/element_yellow_square.bmp" >>= loadTexture renderer
   noneImage      <- createTexture renderer 1 1
+  starImage      <- getDataFileName "assets/star.bmp" >>= loadTexture renderer
+  heartImage     <- getDataFileName "assets/heart.bmp" >>= loadTexture renderer
+
   let blockImage = BlockImage {
     getLImage         = lImage,
     getInvertedLImage = invertedLImage,
@@ -268,7 +280,9 @@ main = do
     getTImage         = tImage,
     getLineImage      = lineImage,
     getSquareImage    = squareImage,
-    getNoneImage      = noneImage
+    getNoneImage      = noneImage,
+    getStarImage      = starImage,
+    getHeartImage     = heartImage
   }
 
   startingTime <- getPOSIXTimeSecs
@@ -292,7 +306,9 @@ main = do
                 }
               else Nothing
             nextBoardContent   = if executeTick && blockCollides then
-                (boardContent inputGameState)//[((i + (blockPositionX $ blockPosition $ fromJust currentBlock'), j + (blockPositionY $ blockPosition $ fromJust currentBlock')), k) | ((i,j), k) <- assocs $ makeBlockDataFromBlock $ fromJust currentBlock']
+                (boardContent inputGameState) // [((i + (blockPositionX $ blockPosition $ fromJust currentBlock'),
+                                                    j + (blockPositionY $ blockPosition $ fromJust currentBlock')),
+                                                   k) | ((i,j), k) <- assocs $ makeBlockDataFromBlock $ fromJust currentBlock']
               else
                 boardContent inputGameState
             nextGameState = GameState {
@@ -305,7 +321,7 @@ main = do
             }
 
         SDL.clear renderer
-        renderGameStateOnScreen inputGameState renderer blockImage
+        renderGameStateOnScreen inputGameState renderer blockImage executeTick blockCollides
         SDL.present renderer
         unless quit $ loop nextGameState
 
