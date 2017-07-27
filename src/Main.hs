@@ -29,7 +29,7 @@ import Data.Foldable
 #endif
 
 screenWidth, screenHeight :: CInt
-(screenWidth, screenHeight) = (640, 480)
+(screenWidth, screenHeight) = (800, 600)
 
 data GamePlayAction = Quit | Accelerate | Hammer | RotateLeft | RotateRight | MoveLeft | MoveRight deriving Eq
 data BlockType = None | L | InvertedL | S | InvertedS | T | Line | Square deriving (Show, Eq)
@@ -145,14 +145,16 @@ rotateArrayRight arr = array ((x1,x0),(y1,y0))
                              arrElements = elems arr
 
 blocksIntersect :: HaskisBlockData -> HaskisBlockData -> Bool
-blocksIntersect b1 b2 = any (nonNone) $ zip b1values b2values
-                        where nonNone (x, y) = (x == None) || (y == None)
+blocksIntersect b1 b2 = any (intersect) $ zip b1values b2values
+                        where intersect (x, y) = (x /= None) && (y /= None)
                               b1ix = indices b1
                               b1values = map ((!) b1) $ b1ix
                               b2values = map ((!) b2) $ b1ix
 
 blockCollidesWithBoard :: Block -> HaskisBlockData -> Bool
-blockCollidesWithBoard block board = blocksIntersect (makeBlockDataFromBlock block) board
+blockCollidesWithBoard block board =
+  (((blockPositionY $ blockPosition $ block) + (snd $ snd $ bounds $ makeBlockDataFromBlock $ block)) >= gameStartingHeight) ||
+  (blocksIntersect (makeBlockDataFromBlock block) board)
 
 blockNextPosition :: BlockPosition -> Bool -> BlockPosition
 blockNextPosition a False = a
@@ -164,7 +166,7 @@ blockToStringList arr = chunksOf (y0+1) $ map (blockTypeToChar.(arr!)) elemsInOr
                           elemsInOrder = [(i,j) | j <- [x1..y1], i <- [x0..y0]]
 
 gameStartingWidth = 10
-gameStartingHeight = 20
+gameStartingHeight = 16
 gameStartingBlockTimer = 300 -- TODO: Make it dependant on level
 gameStartingOrientation = North
 
@@ -236,12 +238,16 @@ renderTexture renderer tex pos = do
 
 drawBlock :: SDL.Renderer -> BlockImage -> ((Int, Int), BlockType) -> IO ()
 drawBlock renderer blockImage ((x,y),l) = do
-  when (l /= None) $ renderTexture renderer (getBlockImage blockImage l) $ At (P (V2 ((fromIntegral x)*32) ((fromIntegral y)*32)))
+  renderTexture renderer (getBlockImage blockImage l) $ At (P (V2 ((fromIntegral x)*32) ((fromIntegral y)*32)))
+
+drawBlockSansNone :: SDL.Renderer -> BlockImage -> ((Int, Int), BlockType) -> IO ()
+drawBlockSansNone renderer blockImage (pos, l) = do
+  when (l /= None) $ drawBlock renderer blockImage (pos, l)
 
 renderGameStateOnScreen :: GameState -> SDL.Renderer -> BlockImage -> Bool -> Bool -> IO ()
 renderGameStateOnScreen gameState renderer blockImage executeTick blockCollides = do
   mapM_ (drawBlock renderer blockImage) $ assocs $ boardContent $ gameState
-  when (isJust $ currentBlock gameState) $ mapM_ (drawBlock renderer blockImage) $ assocs $ makeBlockDataFromBlock $ fromJust $ currentBlock gameState
+  when (isJust $ currentBlock gameState) $ mapM_ (drawBlockSansNone renderer blockImage) $ assocs $ makeBlockDataFromBlock $ fromJust $ currentBlock gameState
   when executeTick $ renderTexture renderer (getHeartImage blockImage) (At (P (V2 500 200)))
   when blockCollides $ renderTexture renderer (getStarImage blockImage) (At (P (V2 532 200)))
   --let imgPos' = V2 10 20
@@ -268,7 +274,7 @@ main = do
   tImage         <- getDataFileName "assets/element_purple_square.bmp" >>= loadTexture renderer
   lineImage      <- getDataFileName "assets/element_red_square.bmp"    >>= loadTexture renderer
   squareImage    <- getDataFileName "assets/element_yellow_square.bmp" >>= loadTexture renderer
-  noneImage      <- createTexture renderer 1 1
+  noneImage      <- getDataFileName "assets/element_none_square.bmp" >>= loadTexture renderer
   starImage      <- getDataFileName "assets/star.bmp" >>= loadTexture renderer
   heartImage     <- getDataFileName "assets/heart.bmp" >>= loadTexture renderer
 
@@ -296,7 +302,6 @@ main = do
             executeTick        = (currentBlockTimer inputGameState) == 0
             currentBlockTimer' = if executeTick then gameStartingBlockTimer else ((currentBlockTimer inputGameState) - 1)
             currentBlock'      = currentBlock inputGameState
-            blockCollides      = executeTick && isJust currentBlock' && (blockCollidesWithBoard (fromJust currentBlock') (boardContent inputGameState))
             currentBlock''     = if (isJust currentBlock')
               then
                 Just Block {
@@ -305,10 +310,9 @@ main = do
                   blockOrientation = blockOrientation $ fromJust currentBlock'
                 }
               else Nothing
+            blockCollides      = executeTick && isJust currentBlock'' && (blockCollidesWithBoard (fromJust currentBlock'') (boardContent inputGameState))
             nextBoardContent   = if executeTick && blockCollides then
-                (boardContent inputGameState) // [((i + (blockPositionX $ blockPosition $ fromJust currentBlock'),
-                                                    j + (blockPositionY $ blockPosition $ fromJust currentBlock')),
-                                                   k) | ((i,j), k) <- assocs $ makeBlockDataFromBlock $ fromJust currentBlock']
+                (boardContent inputGameState) // (assocs $ makeBlockDataFromBlock $ fromJust currentBlock')
               else
                 boardContent inputGameState
             nextGameState = GameState {
