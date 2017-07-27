@@ -153,7 +153,7 @@ blocksIntersect b1 b2 = any (intersect) $ zip b1values b2values
 
 blockCollidesWithBoard :: Block -> HaskisBlockData -> Bool
 blockCollidesWithBoard block board =
-  (((blockPositionY $ blockPosition $ block) + (snd $ snd $ bounds $ makeBlockDataFromBlock $ block)) >= gameStartingHeight) ||
+  (((blockPositionY $ blockPosition $ block) + 1) >= gameStartingHeight) ||
   (blocksIntersect (makeBlockDataFromBlock block) board)
 
 blockNextPosition :: BlockPosition -> Bool -> BlockPosition
@@ -174,13 +174,13 @@ startingState :: Integer -> GameState
 startingState seed = GameState {
   boardWidth   = gameStartingWidth,
   boardHeight  = gameStartingHeight,
-  boardContent = array ((0,0), (gameStartingWidth,gameStartingHeight))
-                       [((i,j), None) | i <- [0..gameStartingWidth],
-                                        j <- [0..gameStartingHeight]],
+  boardContent = array ((0,0), ((gameStartingWidth-1),(gameStartingHeight-1)))
+                       [((i,j), None) | i <- [0..(gameStartingWidth-1)],
+                                        j <- [0..(gameStartingHeight-1)]],
   currentBlock = Just Block {
-    blockType        = L,
-    blockPosition    = BP 0 0,
-    blockOrientation = North
+    blockType        = Square,
+    blockPosition    = BP 2 0,
+    blockOrientation = gameStartingOrientation
   },
   currentBlockTimer = gameStartingBlockTimer,
   randomSeed = seed
