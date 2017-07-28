@@ -65,7 +65,7 @@ data GameState = GameState {
   boardWidth :: Int,
   boardHeight :: Int,
   boardContent :: HaskisBlockData,
-  currentBlock :: Maybe Block,
+  currentBlock :: Block,
   currentBlockTimer :: Int,
   randomSeed :: Integer
 }
@@ -182,7 +182,7 @@ startingState seed = GameState {
   boardContent = array ((0,0), ((gameStartingWidth-1),(gameStartingHeight-1)))
                        [((i,j), None) | i <- [0..(gameStartingWidth-1)],
                                         j <- [0..(gameStartingHeight-1)]],
-  currentBlock = Just Block {
+  currentBlock = Block {
     blockType        = Square,
     blockPosition    = BP 2 0,
     blockOrientation = gameStartingOrientation
@@ -252,7 +252,7 @@ drawBlockSansNone renderer blockImage (pos, l) = do
 renderGameStateOnScreen :: GameState -> SDL.Renderer -> BlockImage -> Bool -> Bool -> IO ()
 renderGameStateOnScreen gameState renderer blockImage executeTick blockCollides = do
   mapM_ (drawBlock renderer blockImage) $ assocs $ boardContent $ gameState
-  when (isJust $ currentBlock gameState) $ mapM_ (drawBlockSansNone renderer blockImage) $ assocs $ makeBlockDataFromBlock $ fromJust $ currentBlock gameState
+  mapM_ (drawBlockSansNone renderer blockImage) $ assocs $ makeBlockDataFromBlock $ currentBlock gameState
   when executeTick $ renderTexture renderer (getHeartImage blockImage) (At (P (V2 500 200)))
   when blockCollides $ renderTexture renderer (getStarImage blockImage) (At (P (V2 532 200)))
   --let imgPos' = V2 10 20
@@ -307,14 +307,15 @@ main = do
             executeTick        = (currentBlockTimer inputGameState) == 0
             currentBlockTimer' = if executeTick then gameStartingBlockTimer else ((currentBlockTimer inputGameState) - 1)
             currentBlock'      = currentBlock inputGameState
-            currentBlock''     = fmap (moveDownIf executeTick) currentBlock'
-            blockCollides      = executeTick && (maybe False (\b -> blockCollidesWithBoard b $ boardContent $ inputGameState) currentBlock'')
-            nextBoardContent   = boardContent inputGameState // (maybe [] (\b -> if executeTick && blockCollides then (assocs $ makeBlockDataFromBlock $ b) else []) currentBlock')
+            currentBlock''     = moveDownIf executeTick currentBlock'
+            blockCollides      = executeTick && (blockCollidesWithBoard currentBlock'' $ boardContent $ inputGameState)
+            nextBoardContent   = boardContent inputGameState // (if blockCollides then (assocs $ makeBlockDataFromBlock $ currentBlock') else [])
+
             nextGameState = GameState {
               boardWidth   = gameStartingWidth,
               boardHeight  = gameStartingHeight,
               boardContent = nextBoardContent,
-              currentBlock = currentBlock'',
+              currentBlock = if blockCollides then Block { blockType = Line, blockPosition = BP 2 0, blockOrientation = gameStartingOrientation } else currentBlock'',
               currentBlockTimer = currentBlockTimer',
               randomSeed = randomSeed inputGameState
             }
