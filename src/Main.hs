@@ -10,6 +10,7 @@ import Data.List.Split
 import Data.List
 import Data.Time.Clock.POSIX
 import Data.Text (append, unpack)
+import System.Random
 
 import Prelude hiding (init)
 import Control.Monad
@@ -31,11 +32,17 @@ import Data.Foldable
 screenWidth, screenHeight :: CInt
 (screenWidth, screenHeight) = (800, 600)
 
-data GamePlayAction = Quit | Accelerate | Hammer | RotateLeft | RotateRight | MoveLeft | MoveRight deriving Eq
-data BlockType = None | L | InvertedL | S | InvertedS | T | Line | Square deriving (Show, Eq)
+data GamePlayAction = Quit | Accelerate | Hammer | RotateLeft | RotateRight | MoveLeft | MoveRight deriving (Show, Eq)
+data BlockType = None | L | InvertedL | S | InvertedS | T | Line | Square deriving (Show, Enum, Bounded, Eq)
 data BlockOrientation = North | East | West | South
 data BlockPosition = BP Int Int
 type HaskisBlockData = Array (Int, Int) BlockType
+
+instance Random BlockType where
+  randomR (a, b) g =
+    case randomR (fromEnum a, fromEnum b) g of
+      (x, g') -> (toEnum x, g')
+  random g = randomR (minBound, maxBound) g
 
 blockPositionX :: BlockPosition -> Int
 blockPositionX (BP x _) = x
@@ -67,7 +74,7 @@ data GameState = GameState {
   boardContent :: HaskisBlockData,
   currentBlock :: Block,
   currentBlockTimer :: Int,
-  randomSeed :: Integer
+  gameRandomGen :: StdGen
 }
 
 makeT         :: HaskisBlockData
@@ -175,8 +182,8 @@ gameStartingHeight = 16
 gameStartingBlockTimer = 300 -- TODO: Make it dependant on level
 gameStartingOrientation = North
 
-startingState :: Integer -> GameState
-startingState seed = GameState {
+startingState :: StdGen -> GameState
+startingState leRandomGen = GameState {
   boardWidth   = gameStartingWidth,
   boardHeight  = gameStartingHeight,
   boardContent = array ((0,0), ((gameStartingWidth-1),(gameStartingHeight-1)))
@@ -188,7 +195,7 @@ startingState seed = GameState {
     blockOrientation = gameStartingOrientation
   },
   currentBlockTimer = gameStartingBlockTimer,
-  randomSeed = seed
+  gameRandomGen = leRandomGen
 }
 
 keyInputs :: [Event] -> [GamePlayAction]
@@ -296,28 +303,31 @@ main = do
     getHeartImage     = heartImage
   }
 
-  startingTime <- getPOSIXTimeSecs
+  --startingTime <- getPOSIXTimeSecs
+  leRandomGen <- newStdGen
 
-  let initialGameState = startingState startingTime
+  let initialGameState = startingState leRandomGen
 
   let loop inputGameState = do
         events <- SDL.pollEvents
         let events' = keyInputs events
             quit = elem Quit events'
-            executeTick        = (currentBlockTimer inputGameState) == 0
-            currentBlockTimer' = if executeTick then gameStartingBlockTimer else ((currentBlockTimer inputGameState) - 1)
-            currentBlock'      = currentBlock inputGameState
-            currentBlock''     = moveDownIf executeTick currentBlock'
-            blockCollides      = executeTick && (blockCollidesWithBoard currentBlock'' $ boardContent $ inputGameState)
-            nextBoardContent   = boardContent inputGameState // (if blockCollides then (assocs $ makeBlockDataFromBlock $ currentBlock') else [])
+            executeTick      = (currentBlockTimer inputGameState) == 0
+            blockTimer'      = if executeTick then gameStartingBlockTimer else ((currentBlockTimer inputGameState) - 1)
+            block            = currentBlock inputGameState
+            --blockMovedByUser =
+            blockDownIf      = moveDownIf executeTick block
+            blockCollides    = executeTick && (blockCollidesWithBoard blockDownIf $ boardContent $ inputGameState)
+            nextBoardContent = boardContent inputGameState // (if blockCollides then (assocs $ makeBlockDataFromBlock $ block) else [])
+            (randomValue, newRandomGen) = if blockCollides then (random (gameRandomGen inputGameState)) else (Square, (gameRandomGen inputGameState))
 
             nextGameState = GameState {
               boardWidth   = gameStartingWidth,
               boardHeight  = gameStartingHeight,
               boardContent = nextBoardContent,
-              currentBlock = if blockCollides then Block { blockType = Line, blockPosition = BP 2 0, blockOrientation = gameStartingOrientation } else currentBlock'',
-              currentBlockTimer = currentBlockTimer',
-              randomSeed = randomSeed inputGameState
+              currentBlock = if blockCollides then Block { blockType = randomValue, blockPosition = BP 2 0, blockOrientation = gameStartingOrientation } else blockDownIf,
+              currentBlockTimer = blockTimer',
+              gameRandomGen = newRandomGen
             }
 
         SDL.clear renderer
